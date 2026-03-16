@@ -245,6 +245,23 @@ _OV_SC_COLOR = [
     "#A89C92", "#FEE00C", "#FEF2A1",
 ]
 
+_OV_CET = [
+    "#d60000", "#8c3bff", "#018700", "#00acc6", "#97ff00", "#ff7ed1", "#6b004f", "#ffa52f",
+    "#00009c", "#857067", "#004942", "#4f2a00", "#00fdcf", "#bcb6ff", "#95b379", "#bf03b8",
+    "#2466a1", "#280041", "#dbb3af", "#fdf490", "#4f445b", "#a37c00", "#ff7066", "#3f806e",
+    "#82000c", "#a37bb3", "#344d00", "#9ae4ff", "#eb0077", "#2d000a", "#5d90ff", "#00c61f",
+    "#5701aa", "#001d00", "#9a4600", "#959ea5", "#9a425b", "#001f31", "#c8c300", "#ffcfff",
+    "#00bd9a", "#3615ff", "#2d2424", "#df57ff", "#bde6bf", "#7e4497", "#524f3b", "#d86600",
+    "#647438", "#c17287", "#6e7489", "#809c03", "#bd8a64", "#623338", "#cacdda", "#6beb82",
+    "#213f69", "#a17eff", "#fd03ca", "#75bcfd", "#d8c382", "#cda3cd", "#6d4f00", "#006974",
+    "#469e5d", "#93c6bf", "#f9ff00", "#bf5444", "#00643b", "#5b4fa8", "#521f64", "#4f5eff",
+    "#7e8e77", "#b808f9", "#8a91c3", "#b30034", "#87607e", "#9e0075", "#ffddc3", "#500800",
+    "#1a0800", "#4b89b5", "#00dfdf", "#c8fff9", "#2f3415", "#ff2646", "#ff97aa", "#03001a",
+    "#c860b1", "#c3a136", "#7c4f3a", "#f99e77", "#566464", "#d193ff", "#2d1f69", "#411a34",
+    "#af9397", "#629e99", "#bcdd7b", "#ff5d93", "#0f2823", "#b8bdac", "#743b64", "#0f000c",
+    "#7e6ebc", "#9e6b3b", "#ff4600", "#7e0087", "#ffcd3d", "#2f3b42", "#fda5ff", "#89013d",
+]
+
 
 def _color_to_hex(color: Any) -> str:
     try:
@@ -255,8 +272,14 @@ def _color_to_hex(color: Any) -> str:
         return str(color)
 
 
-def _categorical_color(index: int) -> str:
-    return _OV_SC_COLOR[index % len(_OV_SC_COLOR)]
+def _default_discrete_colors(n_categories: int) -> list[str]:
+    if n_categories <= len(_OV_SC_COLOR):
+        base = _OV_SC_COLOR
+    elif n_categories <= 56:
+        base = _OV_CET[:56]
+    else:
+        base = _OV_CET[:112]
+    return [base[index % len(base)] for index in range(n_categories)]
 
 
 def _get_uns_colors_for_labels(adata: Any, col_name: str, labels: list[str]) -> Optional[list[str]]:
@@ -404,19 +427,16 @@ def plot_embedding_payload(
         labels = [*labels, "NA"]
         na_code = len(labels) - 1
         codes = [na_code if code < 0 else code for code in codes]
+    base_palette = _get_uns_colors_for_labels(adata, str(column_name), labels[:-1] if labels and labels[-1] == "NA" else labels)
+    if base_palette is None:
+        base_palette = _default_discrete_colors(len(labels) - 1 if labels and labels[-1] == "NA" else len(labels))
 
     payload["color"] = {
         "mode": "categorical",
         "column": str(column_name),
         "labels": labels,
         "codes": codes,
-        "palette": (
-            (_get_uns_colors_for_labels(adata, str(column_name), labels[:-1]) or [_categorical_color(index) for index in range(len(labels) - 1)])
-            + (["#94a3b8"] if labels and labels[-1] == "NA" else [])
-        )
-        if labels and labels[-1] == "NA"
-        else _get_uns_colors_for_labels(adata, str(column_name), labels)
-        or [_categorical_color(index) for index in range(len(labels))],
+        "palette": base_palette + (["#94a3b8"] if labels and labels[-1] == "NA" else []),
     }
     payload["hover"] = _hover_texts(obs_names, str(column_name), values)
     return payload

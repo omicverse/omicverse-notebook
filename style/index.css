@@ -4,6 +4,84 @@
   font-family: var(--jp-ui-font-family);
 }
 
+.ov-renderer,
+.ov-inspector-shell {
+  --ov-card-bg: #f0f4ff;
+  --ov-card-border: #c5d0f5;
+  --ov-card-fg: #283c50;
+  --ov-card-title: #1a3cc4;
+  --ov-card-badge-bg: #dde8ff;
+  --ov-card-badge-border: #99b0f0;
+  --ov-card-badge-fg: #1a3cc4;
+  --ov-card-muted: #475569;
+  --ov-row-label: #6c757d;
+  --ov-active-bg: #e8f5e9;
+  --ov-active-border: #0b7a27;
+  --ov-active-fg: #0b7a27;
+  --ov-selected-bg: rgba(37, 99, 235, 0.1);
+  --ov-chip-hover-bg: rgba(37, 99, 235, 0.08);
+  --ov-dtype-int-bg: #dbeafe;
+  --ov-dtype-int-fg: #1d4ed8;
+  --ov-dtype-int-border: #bfdbfe;
+  --ov-dtype-float-bg: #dcfce7;
+  --ov-dtype-float-fg: #166534;
+  --ov-dtype-float-border: #bbf7d0;
+  --ov-dtype-object-bg: #fef3c7;
+  --ov-dtype-object-fg: #92400e;
+  --ov-dtype-object-border: #fde68a;
+  --ov-dtype-bool-bg: #fce7f3;
+  --ov-dtype-bool-fg: #9d174d;
+  --ov-dtype-bool-border: #fbcfe8;
+  --ov-dtype-datetime-bg: #ede9fe;
+  --ov-dtype-datetime-fg: #6d28d9;
+  --ov-dtype-datetime-border: #ddd6fe;
+  --ov-dtype-category-bg: #ecfdf5;
+  --ov-dtype-category-fg: #065f46;
+  --ov-dtype-category-border: #a7f3d0;
+  --ov-dtype-other-bg: #f1f5f9;
+  --ov-dtype-other-fg: #475569;
+  --ov-dtype-other-border: #e2e8f0;
+}
+
+:root[data-jp-theme-light='false'] .ov-renderer,
+:root[data-jp-theme-light='false'] .ov-inspector-shell {
+  --ov-card-bg: #1a2540;
+  --ov-card-border: #2d4070;
+  --ov-card-fg: #dbe4f5;
+  --ov-card-title: #7a9ff5;
+  --ov-card-badge-bg: #1e2e55;
+  --ov-card-badge-border: #3a5080;
+  --ov-card-badge-fg: #9cb8ff;
+  --ov-card-muted: #aebdd5;
+  --ov-row-label: #9ca3af;
+  --ov-active-bg: rgba(11, 122, 39, 0.2);
+  --ov-active-border: #19a144;
+  --ov-active-fg: #7adf95;
+  --ov-selected-bg: rgba(37, 99, 235, 0.18);
+  --ov-chip-hover-bg: rgba(37, 99, 235, 0.14);
+  --ov-dtype-int-bg: rgba(59, 130, 246, 0.18);
+  --ov-dtype-int-fg: #9cc2ff;
+  --ov-dtype-int-border: rgba(96, 165, 250, 0.32);
+  --ov-dtype-float-bg: rgba(34, 197, 94, 0.16);
+  --ov-dtype-float-fg: #8ee5aa;
+  --ov-dtype-float-border: rgba(74, 222, 128, 0.3);
+  --ov-dtype-object-bg: rgba(245, 158, 11, 0.16);
+  --ov-dtype-object-fg: #ffd38a;
+  --ov-dtype-object-border: rgba(251, 191, 36, 0.28);
+  --ov-dtype-bool-bg: rgba(236, 72, 153, 0.16);
+  --ov-dtype-bool-fg: #f6a9d0;
+  --ov-dtype-bool-border: rgba(244, 114, 182, 0.28);
+  --ov-dtype-datetime-bg: rgba(139, 92, 246, 0.18);
+  --ov-dtype-datetime-fg: #c6b1ff;
+  --ov-dtype-datetime-border: rgba(167, 139, 250, 0.28);
+  --ov-dtype-category-bg: rgba(20, 184, 166, 0.16);
+  --ov-dtype-category-fg: #8ee3d7;
+  --ov-dtype-category-border: rgba(45, 212, 191, 0.28);
+  --ov-dtype-other-bg: rgba(148, 163, 184, 0.14);
+  --ov-dtype-other-fg: #c8d2e0;
+  --ov-dtype-other-border: rgba(148, 163, 184, 0.24);
+}
+
 .ov-panel {
   display: flex;
   flex-direction: column;
@@ -11,19 +89,19 @@
 }
 
 .ov-card {
-  background: #f0f4ff;
-  border: 1px solid #c5d0f5;
+  background: var(--ov-card-bg);
+  border: 1px solid var(--ov-card-border);
   border-radius: 8px;
   padding: 8px 12px;
   font-family: var(--jp-code-font-family);
   font-size: 12px;
-  color: #283c50;
+  color: var(--ov-card-fg);
   line-height: 1.45;
 }
 
 .ov-card-title {
   font-weight: 700;
-  color: #1a3cc4;
+  color: var(--ov-card-title);
   font-size: 12px;
 }
 
@@ -32,16 +110,16 @@
   margin-left: 6px;
   padding: 1px 8px;
   border-radius: 4px;
-  background: #dde8ff;
-  border: 1px solid #99b0f0;
-  color: #1a3cc4;
+  background: var(--ov-card-badge-bg);
+  border: 1px solid var(--ov-card-badge-border);
+  color: var(--ov-card-badge-fg);
   font-size: 11px;
   font-weight: 600;
 }
 
 .ov-card-name {
   margin-top: 4px;
-  color: #475569;
+  color: var(--ov-card-muted);
   font-size: 11px;
 }
 
@@ -101,7 +179,7 @@
 .ov-chip-more-btn:hover {
   border-color: #2563eb;
   color: #2563eb;
-  background: rgba(37, 99, 235, 0.08);
+  background: var(--ov-chip-hover-bg);
 }
 
 .ov-table-wrap {
@@ -178,45 +256,45 @@
 }
 
 .ov-dtype-int {
-  background: #dbeafe;
-  color: #1d4ed8;
-  border-color: #bfdbfe;
+  background: var(--ov-dtype-int-bg);
+  color: var(--ov-dtype-int-fg);
+  border-color: var(--ov-dtype-int-border);
 }
 
 .ov-dtype-float {
-  background: #dcfce7;
-  color: #166534;
-  border-color: #bbf7d0;
+  background: var(--ov-dtype-float-bg);
+  color: var(--ov-dtype-float-fg);
+  border-color: var(--ov-dtype-float-border);
 }
 
 .ov-dtype-object {
-  background: #fef3c7;
-  color: #92400e;
-  border-color: #fde68a;
+  background: var(--ov-dtype-object-bg);
+  color: var(--ov-dtype-object-fg);
+  border-color: var(--ov-dtype-object-border);
 }
 
 .ov-dtype-bool {
-  background: #fce7f3;
-  color: #9d174d;
-  border-color: #fbcfe8;
+  background: var(--ov-dtype-bool-bg);
+  color: var(--ov-dtype-bool-fg);
+  border-color: var(--ov-dtype-bool-border);
 }
 
 .ov-dtype-datetime {
-  background: #ede9fe;
-  color: #6d28d9;
-  border-color: #ddd6fe;
+  background: var(--ov-dtype-datetime-bg);
+  color: var(--ov-dtype-datetime-fg);
+  border-color: var(--ov-dtype-datetime-border);
 }
 
 .ov-dtype-category {
-  background: #ecfdf5;
-  color: #065f46;
-  border-color: #a7f3d0;
+  background: var(--ov-dtype-category-bg);
+  color: var(--ov-dtype-category-fg);
+  border-color: var(--ov-dtype-category-border);
 }
 
 .ov-dtype-other {
-  background: #f1f5f9;
-  color: #475569;
-  border-color: #e2e8f0;
+  background: var(--ov-dtype-other-bg);
+  color: var(--ov-dtype-other-fg);
+  border-color: var(--ov-dtype-other-border);
 }
 
 .ov-adata-lines {
@@ -235,7 +313,7 @@
   min-width: 48px;
   flex-shrink: 0;
   padding-top: 2px;
-  color: #6c757d;
+  color: var(--ov-row-label);
   font-weight: 600;
   font-size: 10.5px;
   font-family: var(--jp-code-font-family);
@@ -381,7 +459,7 @@
 
 .ov-legend-chip.is-selected {
   border-color: #2563eb;
-  background: rgba(37, 99, 235, 0.1);
+  background: var(--ov-selected-bg);
 }
 
 .ov-legend-chip.is-dimmed {
@@ -461,9 +539,9 @@
 
 .ov-action-btn.is-active,
 .ov-adata-chip.is-active {
-  background: #e8f5e9;
-  border-color: #0b7a27;
-  color: #0b7a27;
+  background: var(--ov-active-bg);
+  border-color: var(--ov-active-border);
+  color: var(--ov-active-fg);
 }
 
 .ov-pre {
@@ -521,31 +599,4 @@
   flex-direction: column;
   gap: 8px;
   min-height: 0;
-}
-
-:root[data-jp-theme-light='false'] .ov-card {
-  background: #1a2540;
-  border-color: #2d4070;
-  color: #dbe4f5;
-}
-
-:root[data-jp-theme-light='false'] .ov-card-title {
-  color: #7a9ff5;
-}
-
-:root[data-jp-theme-light='false'] .ov-card-shape {
-  background: #1e2e55;
-  border-color: #3a5080;
-  color: #7a9ff5;
-}
-
-:root[data-jp-theme-light='false'] .ov-adata-row-label {
-  color: #9ca3af;
-}
-
-:root[data-jp-theme-light='false'] .ov-action-btn.is-active,
-:root[data-jp-theme-light='false'] .ov-adata-chip.is-active {
-  background: rgba(11, 122, 39, 0.2);
-  border-color: #19a144;
-  color: #7adf95;
 }
