@@ -125,6 +125,47 @@
 
 .ov-df-card {
   padding-bottom: 6px;
+  background: var(--jp-layout-color1);
+  border-color: var(--jp-border-color2);
+  color: var(--jp-ui-font-color1);
+}
+
+.ov-df-card .ov-card-title {
+  color: var(--jp-brand-color1, #2563eb);
+}
+
+.ov-df-card .ov-card-name {
+  color: var(--jp-ui-font-color2);
+}
+
+.ov-df-card .ov-card-shape {
+  background: var(--jp-layout-color2);
+  border-color: var(--jp-border-color2);
+  color: var(--jp-ui-font-color1);
+}
+
+:root[data-jp-theme-light='false'] .ov-renderer .ov-df-card,
+:root[data-jp-theme-light='false'] .ov-inspector-shell .ov-df-card {
+  background: #111827 !important;
+  border-color: #374151 !important;
+  color: #e5e7eb !important;
+}
+
+:root[data-jp-theme-light='false'] .ov-renderer .ov-df-card .ov-card-title,
+:root[data-jp-theme-light='false'] .ov-inspector-shell .ov-df-card .ov-card-title {
+  color: #93c5fd !important;
+}
+
+:root[data-jp-theme-light='false'] .ov-renderer .ov-df-card .ov-card-name,
+:root[data-jp-theme-light='false'] .ov-inspector-shell .ov-df-card .ov-card-name {
+  color: #9ca3af !important;
+}
+
+:root[data-jp-theme-light='false'] .ov-renderer .ov-df-card .ov-card-shape,
+:root[data-jp-theme-light='false'] .ov-inspector-shell .ov-df-card .ov-card-shape {
+  background: #1f2937 !important;
+  border-color: #4b5563 !important;
+  color: #e5e7eb !important;
 }
 
 .ov-card-row {
@@ -231,9 +272,16 @@
 .ov-table-notice {
   padding: 6px 8px;
   border-bottom: 1px solid var(--jp-border-color2);
-  background: var(--ov-card-badge-bg);
-  color: var(--ov-card-fg);
+  background: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
   font-size: 11px;
+}
+
+:root[data-jp-theme-light='false'] .ov-renderer .ov-table-notice,
+:root[data-jp-theme-light='false'] .ov-inspector-shell .ov-table-notice {
+  background: #1f2937 !important;
+  border-bottom-color: #374151 !important;
+  color: #e5e7eb !important;
 }
 
 .ov-table {

@@ -81,59 +81,107 @@ def _error_payload(exc: BaseException, context: Optional[str] = None) -> Dict[st
 
 def _render_traceback_html(text: str) -> str:
     lines = text.splitlines() or ["No additional information is available."]
-    rendered = []
-    for raw_line in lines:
-        line = html.escape(raw_line)
+    def _style_traceback_text(value: str) -> str:
+        line = html.escape(value)
         line = re.sub(
-            r'(^\s*File\s+"[^"]+",\s+line\s+\d+.*$)',
-            r'<span style="color:#7c3aed;font-weight:700">\1</span>',
+            r'(".*?")',
+            r'<span style="color:#2563eb">\1</span>',
             line,
         )
         line = re.sub(
-            r"(^\s*[A-Za-z_][A-Za-z0-9_]*(?:Error|Exception|Warning|Exit):)",
-            r'<span style="color:#b91c1c;font-weight:700">\1</span>',
-            line,
-        )
-        line = re.sub(
-            r"(^\s*Traceback \(most recent call last\):$)",
+            r"\b(line\s+\d+)\b",
             r'<span style="color:#0f766e;font-weight:700">\1</span>',
             line,
         )
         line = re.sub(
-            r"(^\s*\d+\s)",
-            r'<span style="color:#64748b">\1</span>',
+            r"\b(in\s+[A-Za-z_][A-Za-z0-9_]*)\b",
+            r'<span style="color:#7c3aed;font-weight:700">\1</span>',
             line,
         )
-        rendered.append(line)
-    return (
-        "<pre style='margin:0; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; overflow-x:auto; "
-        "font-family:var(--jp-code-font-family, Menlo, Consolas, monospace); "
-        "font-size:11px; line-height:1.5; tab-size:4'>"
-        + "\n".join(rendered)
-        + "</pre>"
-    )
+        line = re.sub(
+            r"(^|[\s(])([A-Za-z_][A-Za-z0-9_]*(?:Error|Exception|Warning|Exit))(:?)",
+            r'\1<span style="color:#b91c1c;font-weight:700">\2</span>\3',
+            line,
+        )
+        return line
+
+    def _split_traceback_prefix(value: str) -> tuple[str, str]:
+        if not value.strip():
+            return "", ""
+
+        match = re.match(r"^(\s*-->\d+\|\s*)(.*)$", value)
+        if match:
+            return match.group(1), match.group(2)
+
+        match = re.match(r"^(\s*\d+\|\s*)(.*)$", value)
+        if match:
+            return match.group(1), match.group(2)
+
+        match = re.match(r"^(\s*)(File\s+.*)$", value)
+        if match:
+            return match.group(1), match.group(2)
+
+        match = re.match(r"^(\s*[A-Za-z_][A-Za-z0-9_\.]*:\s+)(.*)$", value)
+        if match:
+            return match.group(1), match.group(2)
+
+        match = re.match(r"^(\s+)(\S.*)$", value)
+        if match:
+            return match.group(1), match.group(2)
+
+        return "", value
+
+    rendered = []
+    for raw_line in lines:
+        if raw_line.startswith("Traceback (most recent call last):"):
+            rendered.append(
+                "<div class='ov-tb-row ov-tb-row--full'><span class='ov-tb-full' "
+                "style='color:#0f766e;font-weight:700'>"
+                + html.escape(raw_line)
+                + "</span></div>"
+            )
+            continue
+
+        prefix, content = _split_traceback_prefix(raw_line)
+        prefix_html = html.escape(prefix)
+        content_html = _style_traceback_text(content)
+
+        if prefix.strip().startswith("-->"):
+            prefix_html = f'<span style="color:#dc2626;font-weight:700">{prefix_html}</span>'
+        elif prefix.strip().endswith("|"):
+            prefix_html = f'<span style="color:#64748b">{prefix_html}</span>'
+        elif prefix.strip():
+            prefix_html = f'<span style="color:#64748b">{prefix_html}</span>'
+
+        if not prefix and not content:
+            rendered.append("<div class='ov-tb-row ov-tb-row--full'><span class='ov-tb-full'>&nbsp;</span></div>")
+            continue
+
+        if not prefix:
+            rendered.append(
+                "<div class='ov-tb-row ov-tb-row--full'><span class='ov-tb-full'>"
+                + (content_html or "&nbsp;")
+                + "</span></div>"
+            )
+            continue
+
+        rendered.append(
+            "<div class='ov-tb-row'>"
+            f"<span class='ov-tb-prefix'>{prefix_html or '&nbsp;'}</span>"
+            f"<span class='ov-tb-content'>{content_html or '&nbsp;'}</span>"
+            "</div>"
+        )
+
+    return "<div class='ov-tb-block'>" + "".join(rendered) + "</div>"
 
 
 def _render_where_html(text: str) -> str:
     lines = text.splitlines() or ["No additional information is available."]
-    rendered = []
-    for raw_line in lines:
-        line = html.escape(raw_line)
-        if raw_line.startswith("Exception raised") or raw_line.startswith("Execution stopped"):
-            line = f'<span style="color:#b91c1c;font-weight:700">{line}</span>'
+    def _style_where_text(value: str) -> str:
+        line = html.escape(value)
         line = re.sub(
             r"`([^`]+)`",
             r'<span style="color:#2563eb;font-weight:700">`\1`</span>',
-            line,
-        )
-        line = re.sub(
-            r"(^\s*--&gt;\d+\|)",
-            r'<span style="color:#dc2626;font-weight:700">\1</span>',
-            line,
-        )
-        line = re.sub(
-            r"(^\s*\d+\|)",
-            r'<span style="color:#64748b">\1</span>',
             line,
         )
         line = re.sub(
@@ -142,18 +190,79 @@ def _render_where_html(text: str) -> str:
             line,
         )
         line = re.sub(
-            r"(^\s*[A-Za-z_][A-Za-z0-9_\.]*:)",
-            r'<span style="color:#0f766e;font-weight:700">\1</span>',
+            r"(^|[\s(])([A-Za-z_][A-Za-z0-9_\.]*:)",
+            r'\1<span style="color:#0f766e;font-weight:700">\2</span>',
             line,
         )
-        rendered.append(line)
-    return (
-        "<pre style='margin:0; white-space:pre; word-break:normal; overflow-x:auto; "
-        "font-family:var(--jp-code-font-family, Menlo, Consolas, monospace); "
-        "font-size:11px; line-height:1.5; tab-size:4'>"
-        + "\n".join(rendered)
-        + "</pre>"
-    )
+        return line
+
+    def _split_where_prefix(value: str) -> tuple[str, str]:
+        if not value.strip():
+            return "", ""
+
+        if value.startswith("Exception raised") or value.startswith("Execution stopped"):
+            return "", value
+
+        match = re.match(r"^(\s*-->\d+\|\s*)(.*)$", value)
+        if match:
+            return match.group(1), match.group(2)
+
+        match = re.match(r"^(\s*\d+\|\s*)(.*)$", value)
+        if match:
+            return match.group(1), match.group(2)
+
+        match = re.match(r"^(\s*[A-Za-z_][A-Za-z0-9_\.]*:\s+)(.*)$", value)
+        if match:
+            return match.group(1), match.group(2)
+
+        match = re.match(r"^(\s+)(\S.*)$", value)
+        if match:
+            return match.group(1), match.group(2)
+
+        return "", value
+
+    rendered = []
+    for raw_line in lines:
+        if raw_line.startswith("Exception raised") or raw_line.startswith("Execution stopped"):
+            rendered.append(
+                "<div class='ov-tb-row ov-tb-row--full'><span class='ov-tb-full' "
+                "style='color:#b91c1c;font-weight:700'>"
+                + _style_where_text(raw_line)
+                + "</span></div>"
+            )
+            continue
+
+        prefix, content = _split_where_prefix(raw_line)
+        prefix_html = html.escape(prefix)
+        content_html = _style_where_text(content)
+
+        if prefix.strip().startswith("-->"):
+            prefix_html = f'<span style="color:#dc2626;font-weight:700">{prefix_html}</span>'
+        elif prefix.strip().endswith("|"):
+            prefix_html = f'<span style="color:#64748b">{prefix_html}</span>'
+        elif prefix.strip():
+            prefix_html = f'<span style="color:#64748b">{prefix_html}</span>'
+
+        if not prefix and not content:
+            rendered.append("<div class='ov-tb-row ov-tb-row--full'><span class='ov-tb-full'>&nbsp;</span></div>")
+            continue
+
+        if not prefix:
+            rendered.append(
+                "<div class='ov-tb-row ov-tb-row--full'><span class='ov-tb-full'>"
+                + (content_html or "&nbsp;")
+                + "</span></div>"
+            )
+            continue
+
+        rendered.append(
+            "<div class='ov-tb-row'>"
+            f"<span class='ov-tb-prefix'>{prefix_html or '&nbsp;'}</span>"
+            f"<span class='ov-tb-content'>{content_html or '&nbsp;'}</span>"
+            "</div>"
+        )
+
+    return "<div class='ov-tb-block'>" + "".join(rendered) + "</div>"
 
 
 def _render_message_html(text: str) -> str:
@@ -209,9 +318,10 @@ def _html_pre_block(text: Optional[str], lexer: Optional[str] = None) -> str:
     elif lexer == "explain":
         body = _render_explanation_html(value)
     elif lexer == "where":
-        mode_class = " ov-exc-pre--fixed"
+        mode_class = " ov-exc-pre--traceback"
         body = _render_where_html(value)
     elif lexer == "pytb":
+        mode_class = " ov-exc-pre--traceback"
         body = _render_traceback_html(value)
     else:
         body = _render_message_html(value)
@@ -375,6 +485,37 @@ def _render_friendly_exception_html(info: Mapping[str, Any]) -> str:
       white-space: pre-wrap !important;
       word-break: break-word !important;
       overflow-x: auto !important;
+    }}
+    .ov-exc-pre--traceback {{
+      overflow-x: hidden;
+    }}
+    .ov-tb-block {{
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      font-family: var(--jp-code-font-family, Menlo, Consolas, monospace);
+      font-size: 11px;
+      line-height: 1.5;
+      font-variant-ligatures: none;
+    }}
+    .ov-tb-row {{
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+      column-gap: 0;
+    }}
+    .ov-tb-row--full {{
+      display: block;
+    }}
+    .ov-tb-prefix {{
+      white-space: pre;
+      color: var(--ov-card-muted);
+    }}
+    .ov-tb-content, .ov-tb-full {{
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      min-width: 0;
     }}
     .ov-exc-pre--fixed {{
       overflow-x: auto;
