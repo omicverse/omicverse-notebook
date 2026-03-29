@@ -4,15 +4,16 @@ build-backend = "hatchling.build"
 
 [project]
 name = "omicverse-notebook"
-version = "0.1.0"
+version = "0.1.2"
 description = "OmicVerse-inspired DataFrame and AnnData previews for JupyterLab"
 readme = "README.md"
 requires-python = ">=3.9"
-license = "MIT"
+license = "GPL-3.0"
 authors = [
-  { name = "OpenAI Codex" }
+  { name = "Zehua Zeng" }
 ]
 dependencies = [
+  "friendly>=0.7.21",
   "pandas>=1.5"
 ]
 

@@ -1,15 +1,13 @@
 import { MainAreaWidget } from '@jupyterlab/apputils';
 import { ISessionContext } from '@jupyterlab/apputils';
 import { Widget } from '@lumino/widgets';
-import { renderPayload, SupportedPayload } from './renderers';
-
-type InspectorPayload = SupportedPayload & { error?: string };
+import { renderErrorState, renderPayload, RenderablePayload } from './renderers';
 
 type InspectorOptions = {
   getSessionContext: () => ISessionContext | null;
 };
 
-async function executePreviewRequest(sessionContext: ISessionContext, expression: string): Promise<InspectorPayload> {
+async function executePreviewRequest(sessionContext: ISessionContext, expression: string): Promise<RenderablePayload> {
   await sessionContext.ready;
 
   const kernel = sessionContext.session?.kernel;
@@ -20,10 +18,10 @@ async function executePreviewRequest(sessionContext: ISessionContext, expression
   const start = '__OMICVERSE_PREVIEW_START__';
   const end = '__OMICVERSE_PREVIEW_END__';
   const code = [
-    'from omicverse_notebook.preview import preview_variable',
+    'from omicverse_notebook.preview import preview_variable_safe',
     'import json',
     `print(${JSON.stringify(start)})`,
-    `print(json.dumps(preview_variable(${JSON.stringify(expression)}), ensure_ascii=False))`,
+    `print(json.dumps(preview_variable_safe(${JSON.stringify(expression)}), ensure_ascii=False))`,
     `print(${JSON.stringify(end)})`
   ].join('\n');
 
@@ -65,7 +63,7 @@ async function executePreviewRequest(sessionContext: ISessionContext, expression
   }
 
   const jsonText = streamText.slice(startIdx + start.length, endIdx).trim();
-  return JSON.parse(jsonText) as InspectorPayload;
+  return JSON.parse(jsonText) as RenderablePayload;
 }
 
 class InspectorBody extends Widget {
@@ -116,16 +114,10 @@ class InspectorBody extends Widget {
 
     try {
       const payload = await executePreviewRequest(sessionContext, expression);
-      if (payload.error) {
-        throw new Error(String(payload.error));
-      }
       this.outputNode.appendChild(renderPayload(payload, true));
       this.setStatus(`Loaded preview for ${expression}.`, false);
     } catch (error) {
-      const pre = document.createElement('pre');
-      pre.className = 'ov-pre';
-      pre.textContent = error instanceof Error ? error.message : String(error);
-      this.outputNode.replaceChildren(pre);
+      this.outputNode.replaceChildren(renderErrorState(error));
       this.setStatus('Preview failed.', true);
     } finally {
       this.buttonNode.disabled = false;

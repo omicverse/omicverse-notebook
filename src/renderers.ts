@@ -17,6 +17,14 @@ type TableData = {
   data: Array<Array<unknown>>;
 };
 
+type ErrorPayload = BasePayload & {
+  type: 'error';
+  error_name?: string;
+  message: string;
+  friendly?: string;
+  traceback?: string;
+};
+
 type DataFramePayload = BasePayload & {
   type: 'dataframe';
   shape?: number[];
@@ -104,6 +112,7 @@ type AnnDataPayload = BasePayload & {
 };
 
 export type SupportedPayload = DataFramePayload | AnnDataPayload | ContentPayload | EmbeddingPayload;
+export type RenderablePayload = SupportedPayload | ErrorPayload;
 
 type PreviewHostElement = HTMLElement & {
   _activeTrigger?: HTMLElement | null;
@@ -228,6 +237,32 @@ function createTable(
   const wrap = document.createElement('div');
   wrap.className = 'ov-table-wrap';
 
+  const totalRows = Number(shape?.[0] ?? tableData.data.length);
+  const totalCols = Number(shape?.[1] ?? tableData.columns.length);
+  const hiddenRows = Math.max(0, totalRows - tableData.data.length);
+  const hiddenCols = Math.max(0, totalCols - tableData.columns.length);
+
+  if (hiddenRows > 0 || hiddenCols > 0) {
+    const notice = document.createElement('div');
+    notice.className = 'ov-table-notice';
+    const summary: string[] = [];
+    if (hiddenRows > 0) {
+      summary.push(`first ${tableData.data.length} / ${totalRows.toLocaleString()} rows`);
+    }
+    if (hiddenCols > 0) {
+      summary.push(`first ${tableData.columns.length} / ${totalCols} columns`);
+    }
+    const hidden: string[] = [];
+    if (hiddenCols > 0) {
+      hidden.push(`${hiddenCols} columns hidden`);
+    }
+    if (hiddenRows > 0) {
+      hidden.push(`${hiddenRows.toLocaleString()} rows hidden`);
+    }
+    notice.textContent = `Preview truncated: showing ${summary.join(', ')}; ${hidden.join(', ')}.`;
+    wrap.appendChild(notice);
+  }
+
   const table = document.createElement('table');
   table.className = 'ov-table';
 
@@ -278,16 +313,98 @@ function createTable(
   if (withFooter && shape && shape.length >= 2) {
     const footer = document.createElement('div');
     footer.className = 'ov-table-footer';
-    const shown = tableData.data.length;
-    const total = Number(shape[0] ?? shown);
+    const shownRows = tableData.data.length;
+    const shownCols = tableData.columns.length;
     footer.textContent =
-      shown < total
-        ? `Showing ${shown} of ${total.toLocaleString()} rows × ${shape[1]} columns`
-        : `${total.toLocaleString()} rows × ${shape[1]} columns`;
+      shownRows < totalRows || shownCols < totalCols
+        ? `Showing ${shownRows} of ${totalRows.toLocaleString()} rows × ${shownCols} of ${totalCols} columns`
+        : `${totalRows.toLocaleString()} rows × ${totalCols} columns`;
     wrap.appendChild(footer);
   }
 
   return wrap;
+}
+
+function stripAnsi(text: string): string {
+  return text.replace(/\u001b\[[0-9;]*m/g, '');
+}
+
+function normalizeKernelError(error: unknown): ErrorPayload {
+  const raw = stripAnsi(error instanceof Error ? error.message : String(error)).trim();
+  const lines = raw.split('\n').map((line) => line.trimEnd());
+  const messageLine =
+    lines.find((line) => /^[A-Za-z_][A-Za-z0-9_]*(Error|Exception|Warning|Exit)\b/.test(line)) ??
+    lines.find((line) => line.trim().length > 0) ??
+    'Kernel execution failed.';
+  const match = messageLine.match(/^([A-Za-z_][A-Za-z0-9_]*(?:Error|Exception|Warning|Exit)):\s*(.*)$/);
+  return {
+    type: 'error',
+    error_name: match?.[1],
+    message: match?.[2] || messageLine,
+    traceback: raw
+  };
+}
+
+function renderErrorPayload(payload: ErrorPayload): HTMLElement {
+  const root = document.createElement('div');
+  root.className = 'ov-panel';
+
+  const card = document.createElement('div');
+  card.className = 'ov-card ov-error-card';
+
+  const title = document.createElement('span');
+  title.className = 'ov-card-title';
+  title.textContent = 'Error';
+  card.appendChild(title);
+
+  if (payload.error_name) {
+    const badge = document.createElement('span');
+    badge.className = 'ov-card-shape';
+    badge.textContent = payload.error_name;
+    card.appendChild(badge);
+  }
+
+  if (payload.name) {
+    const nameNode = document.createElement('div');
+    nameNode.className = 'ov-card-name';
+    nameNode.textContent = payload.name;
+    card.appendChild(nameNode);
+  }
+
+  const summary = document.createElement('div');
+  summary.className = 'ov-error-summary';
+  summary.textContent = payload.message;
+  card.appendChild(summary);
+  root.appendChild(card);
+
+  if (payload.friendly) {
+    const friendly = document.createElement('pre');
+    friendly.className = 'ov-pre ov-error-friendly';
+    friendly.textContent = payload.friendly;
+    root.appendChild(friendly);
+  }
+
+  if (payload.traceback && payload.traceback !== payload.friendly) {
+    const details = document.createElement('details');
+    details.className = 'ov-error-details';
+
+    const summaryNode = document.createElement('summary');
+    summaryNode.textContent = 'Raw traceback';
+    details.appendChild(summaryNode);
+
+    const traceback = document.createElement('pre');
+    traceback.className = 'ov-pre';
+    traceback.textContent = payload.traceback;
+    details.appendChild(traceback);
+
+    root.appendChild(details);
+  }
+
+  return root;
+}
+
+export function renderErrorState(error: unknown): HTMLElement {
+  return renderErrorPayload(normalizeKernelError(error));
 }
 
 function setPreviewContent(
@@ -402,32 +519,32 @@ async function requestEmbeddingPayload(
   target: string,
   basis: string,
   colorBy?: string
-): Promise<EmbeddingPayload> {
+): Promise<EmbeddingPayload | ErrorPayload> {
   const payload = await requestKernelJson(
     [
-      'from omicverse_notebook.preview import plot_embedding_payload',
-      `print(json.dumps(plot_embedding_payload(${JSON.stringify(target)}, basis=${JSON.stringify(
+      'from omicverse_notebook.preview import plot_embedding_payload_safe',
+      `print(json.dumps(plot_embedding_payload_safe(${JSON.stringify(target)}, basis=${JSON.stringify(
         basis
       )}, color_by=${colorBy ? JSON.stringify(colorBy) : 'None'}), ensure_ascii=False))`
     ].join('\n')
   );
-  return payload as EmbeddingPayload;
+  return payload as EmbeddingPayload | ErrorPayload;
 }
 
 async function requestAnnDataSlotPayload(
   target: string,
   slot: 'obs' | 'var' | 'uns' | 'obsm' | 'layers',
   key?: string
-): Promise<SupportedPayload> {
+): Promise<RenderablePayload> {
   const payload = await requestKernelJson(
     [
-      'from omicverse_notebook.preview import preview_anndata_slot',
-      `print(json.dumps(preview_anndata_slot(${JSON.stringify(target)}, slot=${JSON.stringify(
+      'from omicverse_notebook.preview import preview_anndata_slot_safe',
+      `print(json.dumps(preview_anndata_slot_safe(${JSON.stringify(target)}, slot=${JSON.stringify(
         slot
       )}, key=${key ? JSON.stringify(key) : 'None'}), ensure_ascii=False))`
     ].join('\n')
   );
-  return payload as SupportedPayload;
+  return payload as RenderablePayload;
 }
 
 function renderDataFramePayload(payload: DataFramePayload, options: { withFooter?: boolean } = {}): HTMLElement {
@@ -874,16 +991,13 @@ function renderEmbeddingPayload(payload: EmbeddingPayload): HTMLElement {
   root.appendChild(plotLayout);
 
   void Promise.resolve().then(() => renderIntoHost()).catch((error) => {
-    const errorNode = document.createElement('pre');
-    errorNode.className = 'ov-pre';
-    errorNode.textContent = error instanceof Error ? error.message : String(error);
-    host.replaceChildren(errorNode);
+    host.replaceChildren(renderErrorState(error));
   });
 
   return root;
 }
 
-function createLabeledPreview(label: string, payload: SupportedPayload): HTMLElement {
+function createLabeledPreview(label: string, payload: RenderablePayload): HTMLElement {
   const container = document.createElement('div');
   const header = document.createElement('div');
   header.className = 'ov-meta';
@@ -1115,6 +1229,11 @@ function renderAnnDataPayload(payload: AnnDataPayload): HTMLElement {
       if (currentNonce !== requestNonce || previewHost.dataset.activeSource !== sourceKey) {
         return true;
       }
+      if (embedding.type === 'error') {
+        debugLog('embedding:loaded-error', { basis, colorBy, message: embedding.message });
+        setPreviewContent(previewHost, renderPayload(embedding), sourceKey, trigger, 'is-active', true);
+        return true;
+      }
       debugLog('embedding:loaded', {
         basis: embedding.basis,
         colorMode: embedding.color.mode,
@@ -1126,10 +1245,7 @@ function renderAnnDataPayload(payload: AnnDataPayload): HTMLElement {
         return true;
       }
       debugLog('embedding:failed', { basis, colorBy, error });
-      const errorNode = document.createElement('pre');
-      errorNode.className = 'ov-pre';
-      errorNode.textContent = error instanceof Error ? error.message : String(error);
-      setPreviewContent(previewHost, errorNode, sourceKey, trigger, 'is-active', true);
+      setPreviewContent(previewHost, renderErrorState(error), sourceKey, trigger, 'is-active', true);
     }
     return true;
   };
@@ -1232,10 +1348,7 @@ function renderAnnDataPayload(payload: AnnDataPayload): HTMLElement {
         return true;
       }
       debugLog('slot:failed', { slot, key, error });
-      const errorNode = document.createElement('pre');
-      errorNode.className = 'ov-pre';
-      errorNode.textContent = error instanceof Error ? error.message : String(error);
-      setPreviewContent(previewHost, errorNode, sourceKey, trigger, 'is-active', true);
+      setPreviewContent(previewHost, renderErrorState(error), sourceKey, trigger, 'is-active', true);
     }
     return true;
   };
@@ -1363,7 +1476,10 @@ function renderAnnDataPayload(payload: AnnDataPayload): HTMLElement {
   return root;
 }
 
-export function renderPayload(payload: SupportedPayload, _emphasizeFooter = false): HTMLElement {
+export function renderPayload(payload: RenderablePayload, _emphasizeFooter = false): HTMLElement {
+  if (payload.type === 'error') {
+    return renderErrorPayload(payload);
+  }
   if (payload.type === 'dataframe') {
     return renderDataFramePayload(payload, { withFooter: true });
   }
@@ -1384,7 +1500,7 @@ export class OmicVerseRenderer extends Widget implements IRenderMime.IRenderer {
 
   async renderModel(model: IRenderMime.IMimeModel): Promise<void> {
     this.node.replaceChildren();
-    const payload = model.data[this.mimeType] as SupportedPayload | undefined;
+    const payload = model.data[this.mimeType] as RenderablePayload | undefined;
     if (!payload) {
       const empty = document.createElement('div');
       empty.className = 'ov-empty';

@@ -4,6 +4,13 @@ from __future__ import annotations
 
 import ast
 from collections import OrderedDict
+import contextlib
+import html
+import io
+import sys
+import traceback
+import uuid
+import warnings
 from typing import Any, Dict, Mapping, Optional
 
 import pandas as pd
@@ -14,6 +21,7 @@ DATAFRAME_MIME_TYPE = "application/vnd.omicverse.dataframe+json"
 ANNDATA_MIME_TYPE = "application/vnd.omicverse.anndata+json"
 _PREVIEW_REGISTRY: "OrderedDict[str, Any]" = OrderedDict()
 _PREVIEW_REGISTRY_LIMIT = 128
+_ORIGINAL_IPYTHON_HOOKS: Dict[str, Any] = {}
 
 
 def _json_safe_frame(frame: pd.DataFrame, max_rows: int, max_cols: int) -> Dict[str, Any]:
@@ -25,6 +33,288 @@ def _json_safe_frame(frame: pd.DataFrame, max_rows: int, max_cols: int) -> Dict[
         "data": preview.values.tolist(),
     }
 
+
+def _strip_friendly_preamble(text: str) -> str:
+    prefixes = (
+        "Are you using a regular Python console instead of a Friendly console?",
+        "If so, to continue, try:",
+        "You will need to import `start_console` if you have not already done so.",
+    )
+    lines = text.replace("\r\n", "\n").split("\n")
+    filtered = [line for line in lines if not any(line.startswith(prefix) for prefix in prefixes)]
+    while filtered and not filtered[0].strip():
+        filtered.pop(0)
+    while filtered and not filtered[-1].strip():
+        filtered.pop()
+    return "\n".join(filtered)
+
+
+def _friendly_traceback_text() -> Optional[str]:
+    try:
+        import friendly_traceback
+
+        friendly_traceback.explain_traceback(redirect="capture")
+        output = friendly_traceback.get_output().strip()
+        output = _strip_friendly_preamble(output)
+        return output or None
+    except Exception:
+        return None
+
+
+def _error_payload(exc: BaseException, context: Optional[str] = None) -> Dict[str, Any]:
+    message = str(exc).strip() or exc.__class__.__name__
+    traceback_text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)).strip()
+    payload: Dict[str, Any] = {
+        "type": "error",
+        "error_name": exc.__class__.__name__,
+        "message": message,
+        "traceback": traceback_text,
+    }
+    if context:
+        payload["name"] = context
+    friendly = _friendly_traceback_text()
+    if friendly:
+        payload["friendly"] = friendly
+    return payload
+
+
+def _html_pre_block(text: Optional[str]) -> str:
+    value = (text or "").strip()
+    if not value:
+        value = "No additional information is available."
+    return f'<pre class="ov-exc-pre">{html.escape(value)}</pre>'
+
+
+def _friendly_where_text(info: Mapping[str, Any]) -> str:
+    parts = []
+    for key in (
+        "exception_raised_header",
+        "exception_raised_source",
+        "exception_raised_variables",
+        "last_call_header",
+        "last_call_source",
+        "last_call_variables",
+    ):
+        value = info.get(key)
+        if value:
+            parts.append(str(value).strip())
+    return "\n\n".join(part for part in parts if part)
+
+
+def _friendly_why_text(info: Mapping[str, Any]) -> str:
+    parts = []
+    for key in ("suggest", "cause"):
+        value = info.get(key)
+        if value:
+            parts.append(str(value).strip())
+    if not parts:
+        return "Friendly-traceback does not know the cause of this error."
+    return "\n\n".join(parts)
+
+
+def _render_friendly_exception_html(info: Mapping[str, Any]) -> str:
+    message = str(info.get("message", "Python exception")).strip()
+    error_name, _, summary = message.partition(":")
+    error_name = error_name.strip() or "Error"
+    summary = summary.strip() or message
+    unique = f"ov-exc-{uuid.uuid4().hex}"
+
+    sections = [
+        ("message", "Message", message),
+        ("what", "What", str(info.get("generic", "")).strip()),
+        ("why", "Why", _friendly_why_text(info)),
+        ("where", "Where", _friendly_where_text(info)),
+        ("traceback", "Traceback", str(info.get("original_python_traceback", "")).strip()),
+    ]
+
+    controls = []
+    panels = []
+    selectors = []
+    for index, (slug, label, text) in enumerate(sections):
+        input_id = f"{unique}-{slug}"
+        checked = " checked" if index == 0 else ""
+        controls.append(
+            f'<input type="radio" name="{unique}-tab" id="{input_id}" class="ov-exc-radio"{checked}>'
+        )
+        controls.append(f'<label for="{input_id}" class="ov-exc-btn">{html.escape(label)}</label>')
+        panels.append(
+            f'<section class="ov-exc-panel" data-panel="{slug}">{_html_pre_block(text)}</section>'
+        )
+        selectors.append(
+            f'#{input_id}:checked ~ .ov-exc-panels [data-panel="{slug}"] {{ display: block; }}'
+        )
+        selectors.append(
+            f'#{input_id}:checked + .ov-exc-btn {{ background: var(--ov-active-bg); border-color: var(--ov-active-border); color: var(--ov-active-fg); }}'
+        )
+
+    return f"""
+<div class="ov-exc-shell">
+  <style>
+    .ov-exc-shell {{
+      --ov-card-bg: var(--jp-layout-color1, #f8fafc);
+      --ov-card-border: var(--jp-border-color2, #cbd5e1);
+      --ov-card-fg: var(--jp-ui-font-color1, #0f172a);
+      --ov-card-muted: var(--jp-ui-font-color2, #475569);
+      --ov-card-title: var(--jp-error-color1, #b91c1c);
+      --ov-card-badge-bg: rgba(239, 68, 68, 0.1);
+      --ov-card-badge-border: rgba(239, 68, 68, 0.25);
+      --ov-card-badge-fg: var(--jp-error-color1, #b91c1c);
+      --ov-active-bg: rgba(37, 99, 235, 0.1);
+      --ov-active-border: #2563eb;
+      --ov-active-fg: #2563eb;
+      margin: 6px 0 10px;
+      color: var(--ov-card-fg);
+      font-family: var(--jp-ui-font-family);
+    }}
+    .ov-exc-card {{
+      background: var(--ov-card-bg);
+      border: 1px solid var(--ov-card-border);
+      border-left: 4px solid var(--jp-error-color1, #b91c1c);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }}
+    .ov-exc-head {{
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }}
+    .ov-exc-title {{
+      font-weight: 700;
+      color: var(--ov-card-title);
+      font-size: 12px;
+    }}
+    .ov-exc-badge {{
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: var(--ov-card-badge-bg);
+      border: 1px solid var(--ov-card-badge-border);
+      color: var(--ov-card-badge-fg);
+      font-size: 11px;
+      font-family: var(--jp-code-font-family);
+    }}
+    .ov-exc-summary {{
+      margin-top: 2px;
+      color: var(--ov-card-fg);
+      font-size: 12px;
+      line-height: 1.45;
+    }}
+    .ov-exc-tabs {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-top: 8px;
+    }}
+    .ov-exc-radio {{
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }}
+    .ov-exc-btn {{
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--ov-card-border);
+      border-radius: 6px;
+      padding: 3px 10px;
+      background: var(--jp-layout-color0, #fff);
+      color: var(--ov-card-fg);
+      cursor: pointer;
+      font-size: 11px;
+      line-height: 1.4;
+      user-select: none;
+    }}
+    .ov-exc-panels {{
+      width: 100%;
+      margin-top: 8px;
+    }}
+    .ov-exc-panel {{
+      display: none;
+    }}
+    .ov-exc-pre {{
+      margin: 0;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--ov-card-border);
+      background: var(--jp-layout-color0, #fff);
+      color: var(--ov-card-fg);
+      font-family: var(--jp-code-font-family);
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }}
+    {" ".join(selectors)}
+  </style>
+  <div class="ov-exc-card">
+    <div class="ov-exc-head">
+      <span class="ov-exc-title">Exception</span>
+      <span class="ov-exc-badge">{html.escape(error_name)}</span>
+    </div>
+    <div class="ov-exc-summary">{html.escape(summary)}</div>
+    <div class="ov-exc-tabs">
+      {"".join(controls)}
+      <div class="ov-exc-panels">
+        {"".join(panels)}
+      </div>
+    </div>
+  </div>
+</div>
+"""
+
+
+def _friendly_info_from_exception(etype: type[BaseException], value: BaseException, tb: Any) -> Dict[str, Any]:
+    from friendly_traceback.config import session
+
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
+        return session.get_traceback_info(etype, value, tb)
+
+
+def _render_current_exception() -> bool:
+    etype, value, tb = sys.exc_info()
+    if etype is None or value is None:
+        return False
+
+    from IPython.display import HTML, display
+
+    info = _friendly_info_from_exception(etype, value, tb)
+    display(HTML(_render_friendly_exception_html(info)))
+    return True
+
+
+def _install_ipython_exception_ui() -> None:
+    from IPython.core.interactiveshell import InteractiveShell
+
+    if _ORIGINAL_IPYTHON_HOOKS:
+        return
+
+    _ORIGINAL_IPYTHON_HOOKS["showtraceback"] = InteractiveShell.showtraceback
+    _ORIGINAL_IPYTHON_HOOKS["showsyntaxerror"] = InteractiveShell.showsyntaxerror
+
+    def _showtraceback(self: Any, *args: Any, **kwargs: Any) -> None:
+        if not _render_current_exception():
+            _ORIGINAL_IPYTHON_HOOKS["showtraceback"](self, *args, **kwargs)
+
+    def _showsyntaxerror(self: Any, *args: Any, **kwargs: Any) -> None:
+        if not _render_current_exception():
+            _ORIGINAL_IPYTHON_HOOKS["showsyntaxerror"](self, *args, **kwargs)
+
+    InteractiveShell.showtraceback = _showtraceback
+    InteractiveShell.showsyntaxerror = _showsyntaxerror
+
+
+def _load_anndata_type() -> Optional[type]:
+    buffer = io.StringIO()
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
+                import anndata
+        return anndata.AnnData
+    except Exception:
+        return None
 
 def _df_payload(
     frame: pd.DataFrame,
@@ -162,7 +452,7 @@ def _anndata_payload(
     value: Any,
     name: Optional[str] = None,
     max_rows: int = 24,
-    max_cols: int = 10,
+    max_cols: int = 20,
     key_limit: int = 18,
     nested_preview_limit: int = 3,
 ) -> Dict[str, Any]:
@@ -489,7 +779,7 @@ def preview_value(
     value: Any,
     name: Optional[str] = None,
     max_rows: int = 40,
-    max_cols: int = 12,
+    max_cols: int = 24,
     key_limit: int = 18,
     nested_preview_limit: int = 3,
 ) -> Dict[str, Any]:
@@ -508,7 +798,7 @@ def preview_value(
             value,
             name=name,
             max_rows=min(max_rows, 24),
-            max_cols=min(max_cols, 10),
+            max_cols=min(max_cols, 20),
             key_limit=key_limit,
             nested_preview_limit=nested_preview_limit,
         )
@@ -573,6 +863,51 @@ def preview_variable(
     return preview_value(value, name=expression, **kwargs)
 
 
+def preview_variable_safe(
+    expression: str,
+    namespace: Optional[Mapping[str, Any]] = None,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    try:
+        return preview_variable(expression, namespace=namespace, **kwargs)
+    except Exception as exc:
+        return _error_payload(exc, context=expression)
+
+
+def preview_anndata_slot_safe(
+    target: str,
+    slot: str,
+    key: Optional[str] = None,
+    namespace: Optional[Mapping[str, Any]] = None,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    try:
+        return preview_anndata_slot(target, slot=slot, key=key, namespace=namespace, **kwargs)
+    except Exception as exc:
+        label = f"{target}.{slot}" if key is None else f'{target}.{slot}["{key}"]'
+        return _error_payload(exc, context=label)
+
+
+def plot_embedding_payload_safe(
+    target: str,
+    basis: str = "X_umap",
+    color_by: Optional[str] = None,
+    namespace: Optional[Mapping[str, Any]] = None,
+    max_points: int = 50000,
+) -> Dict[str, Any]:
+    try:
+        return plot_embedding_payload(
+            target,
+            basis=basis,
+            color_by=color_by,
+            namespace=namespace,
+            max_points=max_points,
+        )
+    except Exception as exc:
+        label = f"{target}.obsm[{basis}]"
+        return _error_payload(exc, context=label)
+
+
 def _ensure_json_formatter(ipython: Any, mime_type: str) -> JSONFormatter:
     formatter = ipython.display_formatter.formatters.get(mime_type)
     if formatter is None:
@@ -622,19 +957,35 @@ def enable_formatters(ipython: Optional[Any] = None, **kwargs: Any) -> bool:
         lambda value: preview_value(value, **kwargs),
     )
 
-    try:
-        import anndata
-
+    anndata_type = _load_anndata_type()
+    if anndata_type is not None:
         anndata_formatter = _ensure_json_formatter(ipython, ANNDATA_MIME_TYPE)
         anndata_formatter.for_type(
-            anndata.AnnData,
+            anndata_type,
             lambda value: preview_value(value, **kwargs),
         )
-    except Exception:
-        pass
 
     return True
 
 
+def enable_all(
+    ipython: Optional[Any] = None,
+    theme: Optional[str] = None,
+    **kwargs: Any,
+) -> bool:
+    if ipython is None:
+        ipython = get_ipython()  # type: ignore[name-defined]
+    if ipython is None:
+        return False
+
+    if theme is not None:
+        normalized = str(theme).strip().lower()
+        if normalized not in {"dark", "light", "default"}:
+            raise ValueError('theme must be "light", "dark", or None')
+
+    _install_ipython_exception_ui()
+    return enable_formatters(ipython, **kwargs)
+
+
 def load_ipython_extension(ipython: Optional[Any]) -> None:
-    enable_formatters(ipython)
+    enable_all(ipython)

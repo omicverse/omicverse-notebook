@@ -191,6 +191,14 @@
   background: var(--jp-layout-color1);
 }
 
+.ov-table-notice {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--jp-border-color2);
+  background: var(--ov-card-badge-bg);
+  color: var(--ov-card-fg);
+  font-size: 11px;
+}
+
 .ov-table {
   width: 100%;
   border-collapse: collapse;
@@ -554,6 +562,38 @@
   font-size: 11px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.ov-error-card {
+  border-left: 4px solid var(--jp-error-color1);
+}
+
+.ov-error-summary {
+  margin-top: 8px;
+  color: var(--jp-ui-font-color1);
+  font-size: 12px;
+}
+
+.ov-error-friendly {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.ov-error-details {
+  border: 1px solid var(--jp-border-color2);
+  border-radius: 6px;
+  background: var(--jp-layout-color1);
+}
+
+.ov-error-details > summary {
+  cursor: pointer;
+  padding: 7px 10px;
+  font-size: 11px;
+  color: var(--jp-ui-font-color2);
+}
+
+.ov-error-details[open] > summary {
+  border-bottom: 1px solid var(--jp-border-color2);
 }
 
 .ov-inspector-root,

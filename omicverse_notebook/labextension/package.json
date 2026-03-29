@@ -33,16 +33,16 @@
     "install:extension": "jlpm build"
   },
   "dependencies": {
-    "@jupyterlab/application": "~4.4.6",
+    "@jupyterlab/application": "~4.5.6",
     "@jupyterlab/apputils": "~4.5.6",
-    "@jupyterlab/console": "~4.4.6",
-    "@jupyterlab/notebook": "~4.4.6",
-    "@jupyterlab/rendermime-interfaces": "~3.12.6",
-    "@jupyterlab/services": "~7.4.6",
+    "@jupyterlab/console": "~4.5.6",
+    "@jupyterlab/notebook": "~4.5.6",
+    "@jupyterlab/rendermime-interfaces": "~3.13.6",
+    "@jupyterlab/services": "~7.5.6",
     "@lumino/widgets": "^2.5.0"
   },
   "devDependencies": {
-    "@jupyterlab/builder": "~4.4.6",
+    "@jupyterlab/builder": "~4.5.6",
     "rimraf": "^5.0.10",
     "typescript": "~5.7.3"
   },
@@ -51,7 +51,7 @@
     "mimeExtension": "lib/mime.js",
     "outputDir": "omicverse_notebook/labextension",
     "_build": {
-      "load": "static/remoteEntry.1add1e7167456200e90f.js",
+      "load": "static/remoteEntry.9b7cb3c0205a4314026e.js",
       "extension": "./extension",
       "mimeExtension": "./mimeExtension",
       "style": "./style"

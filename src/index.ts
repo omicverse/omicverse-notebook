@@ -22,7 +22,7 @@ async function enableKernelFormatters(sessionContext: ISessionContext, enabledSe
   }
 
   const future = kernel.requestExecute({
-    code: 'from omicverse_notebook import enable_formatters; enable_formatters()',
+    code: 'from omicverse_notebook import enable_all; enable_all()',
     stop_on_error: false,
     store_history: false,
     silent: false
