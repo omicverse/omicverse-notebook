@@ -22,6 +22,7 @@ ANNDATA_MIME_TYPE = "application/vnd.omicverse.anndata+json"
 _PREVIEW_REGISTRY: "OrderedDict[str, Any]" = OrderedDict()
 _PREVIEW_REGISTRY_LIMIT = 128
 _ORIGINAL_IPYTHON_HOOKS: Dict[str, Any] = {}
+_RICH_THEME = "github-light"
 
 
 def _json_safe_frame(frame: pd.DataFrame, max_rows: int, max_cols: int) -> Dict[str, Any]:
@@ -78,11 +79,36 @@ def _error_payload(exc: BaseException, context: Optional[str] = None) -> Dict[st
     return payload
 
 
-def _html_pre_block(text: Optional[str]) -> str:
+def _render_rich_text_html(text: str, lexer: Optional[str] = None) -> str:
+    try:
+        from rich.console import Console
+        from rich.highlighter import ReprHighlighter
+        from rich.syntax import Syntax
+        from rich.text import Text
+
+        console = Console(
+            record=True,
+            width=96,
+            file=io.StringIO(),
+            force_terminal=False,
+            force_jupyter=False,
+        )
+        if lexer:
+            console.print(Syntax(text, lexer, theme=_RICH_THEME, word_wrap=True, background_color="default"))
+        else:
+            rich_text = Text(text)
+            ReprHighlighter()(rich_text)
+            console.print(rich_text)
+        return console.export_html(inline_styles=True, code_format="{code}").strip()
+    except Exception:
+        return html.escape(text)
+
+
+def _html_pre_block(text: Optional[str], lexer: Optional[str] = None) -> str:
     value = (text or "").strip()
     if not value:
         value = "No additional information is available."
-    return f'<pre class="ov-exc-pre">{html.escape(value)}</pre>'
+    return f'<div class="ov-exc-pre">{_render_rich_text_html(value, lexer=lexer)}</div>'
 
 
 def _friendly_where_text(info: Mapping[str, Any]) -> str:
@@ -120,17 +146,17 @@ def _render_friendly_exception_html(info: Mapping[str, Any]) -> str:
     unique = f"ov-exc-{uuid.uuid4().hex}"
 
     sections = [
-        ("message", "Message", message),
-        ("what", "What", str(info.get("generic", "")).strip()),
-        ("why", "Why", _friendly_why_text(info)),
-        ("where", "Where", _friendly_where_text(info)),
-        ("traceback", "Traceback", str(info.get("original_python_traceback", "")).strip()),
+        ("message", "Message", message, "pytb"),
+        ("what", "What", str(info.get("generic", "")).strip(), None),
+        ("why", "Why", _friendly_why_text(info), None),
+        ("where", "Where", _friendly_where_text(info), None),
+        ("traceback", "Traceback", str(info.get("original_python_traceback", "")).strip(), "pytb"),
     ]
 
     controls = []
     panels = []
     selectors = []
-    for index, (slug, label, text) in enumerate(sections):
+    for index, (slug, label, text, lexer) in enumerate(sections):
         input_id = f"{unique}-{slug}"
         checked = " checked" if index == 0 else ""
         controls.append(
@@ -138,7 +164,7 @@ def _render_friendly_exception_html(info: Mapping[str, Any]) -> str:
         )
         controls.append(f'<label for="{input_id}" class="ov-exc-btn">{html.escape(label)}</label>')
         panels.append(
-            f'<section class="ov-exc-panel" data-panel="{slug}">{_html_pre_block(text)}</section>'
+            f'<section class="ov-exc-panel" data-panel="{slug}">{_html_pre_block(text, lexer=lexer)}</section>'
         )
         selectors.append(
             f'#{input_id}:checked ~ .ov-exc-panels [data-panel="{slug}"] {{ display: block; }}'
@@ -242,8 +268,12 @@ def _render_friendly_exception_html(info: Mapping[str, Any]) -> str:
       font-family: var(--jp-code-font-family);
       font-size: 11px;
       line-height: 1.5;
-      white-space: pre-wrap;
       word-break: break-word;
+      overflow-x: auto;
+    }}
+    .ov-exc-pre pre {{
+      margin: 0;
+      white-space: pre-wrap;
     }}
     {" ".join(selectors)}
   </style>
@@ -279,30 +309,63 @@ def _render_current_exception() -> bool:
 
     from IPython.display import HTML, display
 
-    info = _friendly_info_from_exception(etype, value, tb)
-    display(HTML(_render_friendly_exception_html(info)))
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
+        info = _friendly_info_from_exception(etype, value, tb)
+        html_output = _render_friendly_exception_html(info)
+    display(HTML(html_output))
     return True
 
 
 def _install_ipython_exception_ui() -> None:
     from IPython.core.interactiveshell import InteractiveShell
+    from ipykernel.zmqshell import ZMQInteractiveShell
 
     if _ORIGINAL_IPYTHON_HOOKS:
         return
 
     _ORIGINAL_IPYTHON_HOOKS["showtraceback"] = InteractiveShell.showtraceback
     _ORIGINAL_IPYTHON_HOOKS["showsyntaxerror"] = InteractiveShell.showsyntaxerror
+    _ORIGINAL_IPYTHON_HOOKS["zmq_showtraceback"] = ZMQInteractiveShell.showtraceback
+    _ORIGINAL_IPYTHON_HOOKS["zmq_showsyntaxerror"] = ZMQInteractiveShell.showsyntaxerror
+    _ORIGINAL_IPYTHON_HOOKS["zmq__showtraceback"] = ZMQInteractiveShell._showtraceback
 
     def _showtraceback(self: Any, *args: Any, **kwargs: Any) -> None:
-        if not _render_current_exception():
-            _ORIGINAL_IPYTHON_HOOKS["showtraceback"](self, *args, **kwargs)
+        rendered = _render_current_exception()
+        if rendered:
+            setattr(self, "_ov_exception_rendered", True)
+            self._last_traceback = []
+            return
+        setattr(self, "_ov_exception_rendered", False)
+        _ORIGINAL_IPYTHON_HOOKS["showtraceback"](self, *args, **kwargs)
 
     def _showsyntaxerror(self: Any, *args: Any, **kwargs: Any) -> None:
-        if not _render_current_exception():
-            _ORIGINAL_IPYTHON_HOOKS["showsyntaxerror"](self, *args, **kwargs)
+        rendered = _render_current_exception()
+        if rendered:
+            setattr(self, "_ov_exception_rendered", True)
+            self._last_traceback = []
+            return
+        setattr(self, "_ov_exception_rendered", False)
+        _ORIGINAL_IPYTHON_HOOKS["showsyntaxerror"](self, *args, **kwargs)
+
+    def _zmq_showtraceback(self: Any, *args: Any, **kwargs: Any) -> None:
+        _showtraceback(self, *args, **kwargs)
+
+    def _zmq_showsyntaxerror(self: Any, *args: Any, **kwargs: Any) -> None:
+        _showsyntaxerror(self, *args, **kwargs)
+
+    def _zmq__showtraceback(self: Any, etype: Any, evalue: Any, stb: Any) -> None:
+        if getattr(self, "_ov_exception_rendered", False):
+            self._last_traceback = []
+            self._ov_exception_rendered = False
+            return
+        _ORIGINAL_IPYTHON_HOOKS["zmq__showtraceback"](self, etype, evalue, stb)
 
     InteractiveShell.showtraceback = _showtraceback
     InteractiveShell.showsyntaxerror = _showsyntaxerror
+    ZMQInteractiveShell.showtraceback = _zmq_showtraceback
+    ZMQInteractiveShell.showsyntaxerror = _zmq_showsyntaxerror
+    ZMQInteractiveShell._showtraceback = _zmq__showtraceback
 
 
 def _load_anndata_type() -> Optional[type]:
@@ -973,6 +1036,8 @@ def enable_all(
     theme: Optional[str] = None,
     **kwargs: Any,
 ) -> bool:
+    global _RICH_THEME
+
     if ipython is None:
         ipython = get_ipython()  # type: ignore[name-defined]
     if ipython is None:
@@ -980,7 +1045,11 @@ def enable_all(
 
     if theme is not None:
         normalized = str(theme).strip().lower()
-        if normalized not in {"dark", "light", "default"}:
+        if normalized == "dark":
+            _RICH_THEME = "github-dark"
+        elif normalized in {"light", "default"}:
+            _RICH_THEME = "github-light"
+        else:
             raise ValueError('theme must be "light", "dark", or None')
 
     _install_ipython_exception_ui()
