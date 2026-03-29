@@ -7,6 +7,7 @@ from collections import OrderedDict
 import contextlib
 import html
 import io
+import re
 import sys
 import traceback
 import uuid
@@ -99,16 +100,114 @@ def _render_rich_text_html(text: str, lexer: Optional[str] = None) -> str:
             rich_text = Text(text)
             ReprHighlighter()(rich_text)
             console.print(rich_text)
-        return console.export_html(inline_styles=True, code_format="{code}").strip()
+        return console.export_html(
+            inline_styles=True,
+            code_format="<pre style='margin:0; white-space:pre-wrap; word-break:break-word; overflow-x:auto'>{code}</pre>",
+        ).strip()
     except Exception:
         return html.escape(text)
+
+
+def _render_where_html(text: str) -> str:
+    lines = text.splitlines() or ["No additional information is available."]
+    rendered = []
+    for raw_line in lines:
+        line = html.escape(raw_line)
+        if raw_line.startswith("Exception raised") or raw_line.startswith("Execution stopped"):
+            line = f'<span style="color:#b91c1c;font-weight:700">{line}</span>'
+        line = re.sub(
+            r"`([^`]+)`",
+            r'<span style="color:#2563eb;font-weight:700">`\1`</span>',
+            line,
+        )
+        line = re.sub(
+            r"(^\s*--&gt;\d+\|)",
+            r'<span style="color:#dc2626;font-weight:700">\1</span>',
+            line,
+        )
+        line = re.sub(
+            r"(^\s*\d+\|)",
+            r'<span style="color:#64748b">\1</span>',
+            line,
+        )
+        line = re.sub(
+            r"(\^+)",
+            r'<span style="color:#dc2626;font-weight:700">\1</span>',
+            line,
+        )
+        line = re.sub(
+            r"(^\s*[A-Za-z_][A-Za-z0-9_\.]*:)",
+            r'<span style="color:#0f766e;font-weight:700">\1</span>',
+            line,
+        )
+        rendered.append(line)
+    return (
+        "<pre style='margin:0; white-space:pre; word-break:normal; overflow-x:auto; "
+        "font-family:var(--jp-code-font-family, Menlo, Consolas, monospace); "
+        "font-size:11px; line-height:1.5; tab-size:4'>"
+        + "\n".join(rendered)
+        + "</pre>"
+    )
+
+
+def _render_message_html(text: str) -> str:
+    escaped = html.escape(text.strip() or "No additional information is available.")
+    escaped = re.sub(
+        r"^([A-Za-z_][A-Za-z0-9_]*(?:Error|Exception|Warning|Exit)):",
+        r'<span style="color:#b91c1c;font-weight:700">\1</span>:',
+        escaped,
+    )
+    escaped = re.sub(
+        r"`([^`]+)`",
+        r'<span style="color:#2563eb;font-weight:700">`\1`</span>',
+        escaped,
+    )
+    return (
+        "<pre style='margin:0; white-space:pre-wrap; word-break:break-word; overflow-x:auto; "
+        "font-family:var(--jp-code-font-family, Menlo, Consolas, monospace); "
+        "font-size:11px; line-height:1.5'>"
+        + escaped
+        + "</pre>"
+    )
+
+
+def _render_explanation_html(text: str) -> str:
+    lines = (text.strip() or "No additional information is available.").splitlines()
+    rendered = []
+    for raw_line in lines:
+        line = html.escape(raw_line)
+        line = re.sub(
+            r"`([^`]+)`",
+            r'<span style="color:#2563eb;font-weight:700">`\1`</span>',
+            line,
+        )
+        if raw_line.strip().startswith(("Did you mean", "Likely cause", "I have no suggestion")):
+            line = f'<span style="color:#0f766e;font-weight:700">{line}</span>'
+        rendered.append(line)
+    return (
+        "<pre style='margin:0; white-space:pre-wrap; word-break:break-word; overflow-x:auto; "
+        "font-family:var(--jp-code-font-family, Menlo, Consolas, monospace); "
+        "font-size:11px; line-height:1.5'>"
+        + "\n".join(rendered)
+        + "</pre>"
+    )
 
 
 def _html_pre_block(text: Optional[str], lexer: Optional[str] = None) -> str:
     value = (text or "").strip()
     if not value:
         value = "No additional information is available."
-    return f'<div class="ov-exc-pre">{_render_rich_text_html(value, lexer=lexer)}</div>'
+    mode_class = " ov-exc-pre--fixed" if lexer == "pytb" else ""
+    if lexer == "message":
+        body = _render_message_html(value)
+    elif lexer == "explain":
+        body = _render_explanation_html(value)
+    elif lexer == "where":
+        mode_class = " ov-exc-pre--fixed"
+        body = _render_where_html(value)
+    else:
+        body = _render_rich_text_html(value, lexer=lexer)
+    return f'<div class="ov-exc-pre{mode_class}">{body}</div>'
 
 
 def _friendly_where_text(info: Mapping[str, Any]) -> str:
@@ -146,31 +245,23 @@ def _render_friendly_exception_html(info: Mapping[str, Any]) -> str:
     unique = f"ov-exc-{uuid.uuid4().hex}"
 
     sections = [
-        ("message", "Message", message, "pytb"),
-        ("what", "What", str(info.get("generic", "")).strip(), None),
-        ("why", "Why", _friendly_why_text(info), None),
-        ("where", "Where", _friendly_where_text(info), None),
+        ("message", "Message", message, "message"),
+        ("what", "What", str(info.get("generic", "")).strip(), "explain"),
+        ("why", "Why", _friendly_why_text(info), "explain"),
+        ("where", "Where", _friendly_where_text(info), "where"),
         ("traceback", "Traceback", str(info.get("original_python_traceback", "")).strip(), "pytb"),
     ]
 
     controls = []
     panels = []
-    selectors = []
     for index, (slug, label, text, lexer) in enumerate(sections):
-        input_id = f"{unique}-{slug}"
-        checked = " checked" if index == 0 else ""
+        active = " is-active" if index == 0 else ""
+        hidden = "" if index == 0 else " style='display:none'"
         controls.append(
-            f'<input type="radio" name="{unique}-tab" id="{input_id}" class="ov-exc-radio"{checked}>'
+            f'<button type="button" class="ov-exc-btn{active}" data-target="{slug}">{html.escape(label)}</button>'
         )
-        controls.append(f'<label for="{input_id}" class="ov-exc-btn">{html.escape(label)}</label>')
         panels.append(
-            f'<section class="ov-exc-panel" data-panel="{slug}">{_html_pre_block(text, lexer=lexer)}</section>'
-        )
-        selectors.append(
-            f'#{input_id}:checked ~ .ov-exc-panels [data-panel="{slug}"] {{ display: block; }}'
-        )
-        selectors.append(
-            f'#{input_id}:checked + .ov-exc-btn {{ background: var(--ov-active-bg); border-color: var(--ov-active-border); color: var(--ov-active-fg); }}'
+            f'<section class="ov-exc-panel" data-panel="{slug}"{hidden}>{_html_pre_block(text, lexer=lexer)}</section>'
         )
 
     return f"""
@@ -233,11 +324,6 @@ def _render_friendly_exception_html(info: Mapping[str, Any]) -> str:
       align-items: center;
       margin-top: 8px;
     }}
-    .ov-exc-radio {{
-      position: absolute;
-      opacity: 0;
-      pointer-events: none;
-    }}
     .ov-exc-btn {{
       display: inline-flex;
       align-items: center;
@@ -250,6 +336,11 @@ def _render_friendly_exception_html(info: Mapping[str, Any]) -> str:
       font-size: 11px;
       line-height: 1.4;
       user-select: none;
+    }}
+    .ov-exc-btn.is-active {{
+      background: var(--ov-active-bg);
+      border-color: var(--ov-active-border);
+      color: var(--ov-active-fg);
     }}
     .ov-exc-panels {{
       width: 100%;
@@ -272,10 +363,27 @@ def _render_friendly_exception_html(info: Mapping[str, Any]) -> str:
       overflow-x: auto;
     }}
     .ov-exc-pre pre {{
-      margin: 0;
-      white-space: pre-wrap;
+      margin: 0 !important;
+      white-space: pre-wrap !important;
+      word-break: break-word !important;
+      overflow-x: auto !important;
     }}
-    {" ".join(selectors)}
+    .ov-exc-pre--fixed {{
+      overflow-x: auto;
+      overflow-y: hidden;
+      font-family: var(--jp-code-font-family);
+    }}
+    .ov-exc-pre--fixed pre {{
+      white-space: pre !important;
+      word-break: normal !important;
+      overflow-x: auto !important;
+      font-family: var(--jp-code-font-family) !important;
+      font-variant-ligatures: none;
+    }}
+    .ov-exc-pre--fixed code, .ov-exc-pre--fixed span {{
+      font-family: inherit !important;
+      font-variant-ligatures: none;
+    }}
   </style>
   <div class="ov-exc-card">
     <div class="ov-exc-head">
@@ -290,6 +398,39 @@ def _render_friendly_exception_html(info: Mapping[str, Any]) -> str:
       </div>
     </div>
   </div>
+  <script>
+    (() => {{
+      const root = document.currentScript.closest('.ov-exc-shell');
+      if (!root) return;
+      const buttons = Array.from(root.querySelectorAll('.ov-exc-btn'));
+      const panels = Array.from(root.querySelectorAll('.ov-exc-panel'));
+      const setActive = (target) => {{
+        buttons.forEach((button) => {{
+          const active = button.dataset.target === target;
+          button.classList.toggle('is-active', active);
+        }});
+        panels.forEach((panel) => {{
+          panel.style.display = panel.dataset.panel === target ? 'block' : 'none';
+        }});
+      }};
+      const clearActive = () => {{
+        buttons.forEach((button) => button.classList.remove('is-active'));
+        panels.forEach((panel) => {{
+          panel.style.display = 'none';
+        }});
+      }};
+      buttons.forEach((button) => {{
+        button.addEventListener('click', () => {{
+          const target = button.dataset.target;
+          if (button.classList.contains('is-active')) {{
+            clearActive();
+            return;
+          }}
+          setActive(target);
+        }});
+      }});
+    }})();
+  </script>
 </div>
 """
 
