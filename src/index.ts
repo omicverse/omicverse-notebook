@@ -10,6 +10,62 @@ import { setSessionContextProvider } from './session';
 import themePlugin from './theme';
 import '../style/index.css';
 
+const BRAND_LOGO_SELECTOR = '#jp-top-panel > .lm-Widget:first-child';
+const BRAND_LOGO_APPLIED_ATTR = 'data-ov-brand-logo';
+const BRAND_LOGO_STYLE_ID = 'ov-brand-logo-style';
+
+function ensureBrandLogoStyles(): void {
+  if (document.getElementById(BRAND_LOGO_STYLE_ID)) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = BRAND_LOGO_STYLE_ID;
+  style.textContent = `
+    ${BRAND_LOGO_SELECTOR}[${BRAND_LOGO_APPLIED_ATTR}="true"] {
+      position: relative;
+      min-width: 40px;
+      width: 40px;
+      height: 40px;
+      margin-right: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: center / 32px 32px no-repeat var(--ov-brand-logo-url);
+    }
+
+    ${BRAND_LOGO_SELECTOR}[${BRAND_LOGO_APPLIED_ATTR}="true"] > * {
+      opacity: 0;
+      pointer-events: none;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function applyBrandLogo(logoUrl: string): boolean {
+  const host = document.querySelector(BRAND_LOGO_SELECTOR) as HTMLElement | null;
+  if (!host) {
+    return false;
+  }
+
+  host.setAttribute(BRAND_LOGO_APPLIED_ATTR, 'true');
+  host.style.setProperty('--ov-brand-logo-url', `url("${logoUrl}")`);
+  host.setAttribute('aria-label', 'OmicVerse');
+  host.setAttribute('title', 'OmicVerse');
+  return true;
+}
+
+function resolveBrandLogoUrl(): string {
+  const themeLink = document.querySelector(
+    'link[href*="omicverse-notebook/index.css"], link[href*="omicverse-notebook/light/index.css"]'
+  ) as HTMLLinkElement | null;
+  const href = themeLink?.href;
+  if (href) {
+    return href.replace(/(?:light\/)?index\.css(?:\?.*)?$/, 'favicon.ico');
+  }
+  return `${window.location.origin}/lab/extensions/omicverse-notebook/themes/omicverse-notebook/favicon.ico`;
+}
+
 async function enableKernelFormatters(sessionContext: ISessionContext, enabledSessions: Set<string>): Promise<void> {
   await sessionContext.ready;
   const kernel = sessionContext.session?.kernel;
@@ -140,4 +196,23 @@ const inspectorPlugin: JupyterFrontEndPlugin<void> = {
   }
 };
 
-export default [inspectorPlugin, themePlugin];
+const brandingPlugin: JupyterFrontEndPlugin<void> = {
+  id: 'omicverse-notebook:branding',
+  autoStart: true,
+  activate: () => {
+    ensureBrandLogoStyles();
+    const logoUrl = resolveBrandLogoUrl();
+    if (applyBrandLogo(logoUrl)) {
+      return;
+    }
+
+    const observer = new MutationObserver(() => {
+      if (applyBrandLogo(logoUrl)) {
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+};
+
+export default [brandingPlugin, inspectorPlugin, themePlugin];

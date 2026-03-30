@@ -975,7 +975,7 @@ function renderAnnDataPayload(payload) {
     const root = document.createElement('div');
     root.className = 'ov-panel';
     const card = document.createElement('div');
-    card.className = 'ov-card';
+    card.className = 'ov-card ov-df-card';
     const icon = document.createElement('span');
     icon.className = 'ov-card-title';
     icon.textContent = 'AnnData';
@@ -1267,4 +1267,4 @@ function getSessionContext() {
 /***/ }
 
 }]);
-//# sourceMappingURL=lib_renderers_js.c43ff390d8f4a1d323a2.js.map
+//# sourceMappingURL=lib_renderers_js.e59f1a428188671d008b.js.map

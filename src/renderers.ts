@@ -1249,7 +1249,7 @@ function renderAnnDataPayload(payload: AnnDataPayload): HTMLElement {
   root.className = 'ov-panel';
 
   const card = document.createElement('div');
-  card.className = 'ov-card';
+  card.className = 'ov-card ov-df-card';
 
   const icon = document.createElement('span');
   icon.className = 'ov-card-title';
