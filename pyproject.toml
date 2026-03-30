@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "omicverse-notebook"
-version = "0.1.3rc1"
+version = "0.1.3rc6"
 description = "OmicVerse-inspired DataFrame and AnnData previews for JupyterLab"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -26,11 +26,15 @@ anndata = [
 packages = ["omicverse_notebook"]
 
 [tool.hatch.build.targets.sdist]
-artifacts = ["omicverse_notebook/labextension"]
+artifacts = [
+  "omicverse_notebook/labextension",
+  "omicverse_notebook/labextension/themes"
+]
 
 [tool.hatch.build.targets.wheel.shared-data]
 "omicverse_notebook/labextension/static" = "share/jupyter/labextensions/omicverse-notebook/static"
 "omicverse_notebook/labextension/package.json" = "share/jupyter/labextensions/omicverse-notebook/package.json"
+"omicverse_notebook/labextension/themes" = "share/jupyter/labextensions/omicverse-notebook/themes"
 "install.json" = "share/jupyter/labextensions/omicverse-notebook/install.json"
 
 [tool.hatch.build.hooks.jupyter-builder]
@@ -38,9 +42,13 @@ dependencies = ["hatch-jupyter-builder>=0.9"]
 build-function = "hatch_jupyter_builder.npm_builder"
 ensured-targets = [
   "omicverse_notebook/labextension/static/style.js",
-  "omicverse_notebook/labextension/package.json"
+  "omicverse_notebook/labextension/package.json",
+  "omicverse_notebook/labextension/themes/omicverse-notebook/index.css"
 ]
-skip-if-exists = ["omicverse_notebook/labextension/static/style.js"]
+skip-if-exists = [
+  "omicverse_notebook/labextension/static/style.js",
+  "omicverse_notebook/labextension/themes/omicverse-notebook/index.css"
+]
 
 [tool.hatch.build.hooks.jupyter-builder.build-kwargs]
 build_cmd = "build:prod"

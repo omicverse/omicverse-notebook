@@ -5,3 +5,6 @@ recursive-include omicverse_notebook/labextension *
 recursive-include src *.ts
 recursive-include style *.css
 recursive-include style *.js
+recursive-include theme *.css
+recursive-include theme *.js
+recursive-include theme *.ttf

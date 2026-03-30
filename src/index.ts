@@ -7,6 +7,7 @@ import { IConsoleTracker } from '@jupyterlab/console';
 import { INotebookTracker } from '@jupyterlab/notebook';
 import { createInspectorWidget } from './inspector';
 import { setSessionContextProvider } from './session';
+import themePlugin from './theme';
 import '../style/index.css';
 
 async function enableKernelFormatters(sessionContext: ISessionContext, enabledSessions: Set<string>): Promise<void> {
@@ -139,4 +140,4 @@ const inspectorPlugin: JupyterFrontEndPlugin<void> = {
   }
 };
 
-export default inspectorPlugin;
+export default [inspectorPlugin, themePlugin];

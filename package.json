@@ -17,6 +17,7 @@
   "files": [
     "lib/**/*.{d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
     "style/**/*.{css,js,eot,gif,html,jpg,json,png,svg,woff2,ttf}",
+    "theme/**/*.{css,js,eot,gif,html,jpg,json,png,svg,woff2,ttf}",
     "README.md"
   ],
   "scripts": {
@@ -49,11 +50,13 @@
   "jupyterlab": {
     "extension": "lib/index.js",
     "mimeExtension": "lib/mime.js",
-    "outputDir": "omicverse_notebook/labextension"
+    "outputDir": "omicverse_notebook/labextension",
+    "themePath": "theme/index.css"
   },
   "styleModule": "style/index.js",
   "sideEffects": [
     "style/*.css",
-    "style/index.js"
+    "style/index.js",
+    "theme/*.css"
   ]
 }
