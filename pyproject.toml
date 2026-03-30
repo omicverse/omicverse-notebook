@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "omicverse-notebook"
-version = "0.1.3rc6"
+version = "0.1.4rc1"
 description = "OmicVerse-inspired DataFrame and AnnData previews for JupyterLab"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -43,11 +43,13 @@ build-function = "hatch_jupyter_builder.npm_builder"
 ensured-targets = [
   "omicverse_notebook/labextension/static/style.js",
   "omicverse_notebook/labextension/package.json",
-  "omicverse_notebook/labextension/themes/omicverse-notebook/index.css"
+  "omicverse_notebook/labextension/themes/omicverse-notebook/index.css",
+  "omicverse_notebook/labextension/themes/omicverse-notebook/light/index.css"
 ]
 skip-if-exists = [
   "omicverse_notebook/labextension/static/style.js",
-  "omicverse_notebook/labextension/themes/omicverse-notebook/index.css"
+  "omicverse_notebook/labextension/themes/omicverse-notebook/index.css",
+  "omicverse_notebook/labextension/themes/omicverse-notebook/light/index.css"
 ]
 
 [tool.hatch.build.hooks.jupyter-builder.build-kwargs]

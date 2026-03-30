@@ -8,3 +8,5 @@ recursive-include style *.js
 recursive-include theme *.css
 recursive-include theme *.js
 recursive-include theme *.ttf
+recursive-include theme-light *.css
+recursive-include theme-light *.js

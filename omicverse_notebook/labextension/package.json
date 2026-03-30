@@ -18,13 +18,14 @@
     "lib/**/*.{d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
     "style/**/*.{css,js,eot,gif,html,jpg,json,png,svg,woff2,ttf}",
     "theme/**/*.{css,js,eot,gif,html,jpg,json,png,svg,woff2,ttf}",
+    "theme-light/**/*.{css,js,eot,gif,html,jpg,json,png,svg,woff2,ttf}",
     "README.md"
   ],
   "scripts": {
     "build": "jlpm build:lib && jlpm build:labextension:dev",
     "build:prod": "jlpm clean && jlpm build:lib:prod && jlpm build:labextension",
-    "build:labextension": "jupyter labextension build .",
-    "build:labextension:dev": "jupyter labextension build --development True .",
+    "build:labextension": "jupyter labextension build . && node scripts/sync-extra-themes.mjs",
+    "build:labextension:dev": "jupyter labextension build --development True . && node scripts/sync-extra-themes.mjs",
     "build:lib": "tsc --sourceMap",
     "build:lib:prod": "tsc",
     "clean": "jlpm clean:lib",
@@ -53,7 +54,7 @@
     "outputDir": "omicverse_notebook/labextension",
     "themePath": "theme/index.css",
     "_build": {
-      "load": "static/remoteEntry.2c50023615ca1eb9c43f.js",
+      "load": "static/remoteEntry.a83194f3b1348eddc197.js",
       "extension": "./extension",
       "mimeExtension": "./mimeExtension",
       "style": "./style"
@@ -63,6 +64,7 @@
   "sideEffects": [
     "style/*.css",
     "style/index.js",
-    "theme/*.css"
+    "theme/*.css",
+    "theme-light/*.css"
   ]
 }
