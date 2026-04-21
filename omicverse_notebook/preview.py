@@ -1359,6 +1359,12 @@ def enable_formatters(ipython: Optional[Any] = None, **kwargs: Any) -> bool:
             anndata_type,
             lambda value: preview_value(value, **kwargs),
         )
+        # AnnData's stock _repr_html_ renders poorly outside this plugin
+        # (e.g. GitHub, nbviewer). Drop it so saved notebooks fall back to
+        # the text/plain __repr__, which is readable everywhere.
+        html_formatter = ipython.display_formatter.formatters.get("text/html")
+        if html_formatter is not None:
+            html_formatter.for_type(anndata_type, lambda value: None)
 
     return True
 
