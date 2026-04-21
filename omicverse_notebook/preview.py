@@ -1334,32 +1334,11 @@ def _ensure_json_formatter(ipython: Any, mime_type: str) -> JSONFormatter:
     return formatter
 
 
-def _suppress_pandas_html(ipython: Any) -> None:
-    html_formatter = ipython.display_formatter.formatters.get("text/html")
-    if html_formatter is None:
-        return
-
-    # Force pandas objects to skip their default HTML repr so JupyterLab
-    # selects the OmicVerse custom MIME renderer instead of the stock table.
-    html_formatter.for_type_by_name(
-        "pandas.core.frame",
-        "DataFrame",
-        lambda value: None,
-    )
-    html_formatter.for_type_by_name(
-        "pandas.core.series",
-        "Series",
-        lambda value: None,
-    )
-
-
 def enable_formatters(ipython: Optional[Any] = None, **kwargs: Any) -> bool:
     if ipython is None:
         ipython = get_ipython()  # type: ignore[name-defined]
     if ipython is None:
         return False
-
-    _suppress_pandas_html(ipython)
 
     dataframe_formatter = _ensure_json_formatter(ipython, DATAFRAME_MIME_TYPE)
     dataframe_formatter.for_type_by_name(
